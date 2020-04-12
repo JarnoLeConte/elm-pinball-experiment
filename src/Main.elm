@@ -178,7 +178,11 @@ initialWorld =
     |> World.withGravity (Acceleration.metersPerSecondSquared 9.80665) (Direction3d.zy (Angle.degrees -160))
     |> World.add floor
     |> World.add bottomPlate
+    |> addBodies borders
     |> World.add ball
+
+addBodies : List (Body Data) -> World Data -> World Data
+addBodies bodies world = List.foldr World.add world bodies
 
 floor : Body Data
 floor =
@@ -191,8 +195,8 @@ bottomPlate =
     block3d =
       Block3d.centeredOn
         Frame3d.atOrigin
-        ( Length.centimeters 72
-        , Length.centimeters 130
+        ( Length.centimeters 60
+        , Length.centimeters 120
         , Length.centimeters 1
         )
   in
@@ -201,6 +205,34 @@ bottomPlate =
       , mesh = WebGL.triangles (Meshes.block block3d)
       }
       |> Body.moveTo (Point3d.centimeters 0 0 -0.5)
+
+borders : List (Body Data)
+borders =
+  let
+    block3d =
+      Block3d.centeredOn
+        Frame3d.atOrigin
+        ( Length.centimeters 25
+        , Length.centimeters 2
+        , Length.centimeters 5
+        )
+  in
+    [ Body.block block3d
+        { name = "border1"
+        , mesh = WebGL.triangles (Meshes.block block3d)
+        }
+        |> Body.moveTo (Point3d.centimeters -17.5 -59 2.5)
+    , Body.block block3d
+        { name = "border2"
+        , mesh = WebGL.triangles (Meshes.block block3d)
+        }
+        |> Body.moveTo (Point3d.centimeters 17.5 -59 2.5)
+    , Body.block block3d
+        { name = "border3"
+        , mesh = WebGL.triangles (Meshes.block block3d)
+        }
+        |> Body.moveTo (Point3d.centimeters 0 -61 2.5)
+    ]
 
 
 ball : Body Data
@@ -242,7 +274,7 @@ uniforms canvas camera body =
   , perspective = Mat4.makePerspective 45 (canvas.width / canvas.height) 0.1 100
   , transform = Frame3d.toMat4 (Body.frame body)
   , color = Vec3.vec3 0.9 0.9 0.9
-  , lightDirection = Vec3.normalize (Vec3.vec3 -1 -1 -1)
+  , lightDirection = Vec3.normalize (Vec3.vec3 0 -1 -1)
   }
 
 vertexShader : Shader Attributes Uniforms { vlighting : Float }
