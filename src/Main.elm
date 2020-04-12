@@ -20,10 +20,12 @@ import Math.Matrix4 as Mat4 exposing (Mat4)
 import Geometry.Interop.LinearAlgebra.Frame3d as Frame3d
 
 -- ianmackenzie/elm-geometry
+import Axis3d
 import Block3d
 import Direction3d
 import Frame3d
 import Point3d
+import Vector3d
 import Sphere3d
 
 -- ianmackenzie/elm-units
@@ -37,6 +39,7 @@ import Mass
 import Physics.Body as Body exposing (Body)
 import Physics.World as World exposing (World)
 import Physics.Material as Material
+import Physics.Shape as Shape
 
 -- local imports
 import Meshes exposing (Attributes)
@@ -129,13 +132,13 @@ init _ =
 update : Msg -> Model -> Model
 update msg model =
   case msg of
-    Tick dt ->
+    Tick _ ->
       { model
         | world =
             model.world
               -- |> World.constrain (constrainCar model.steering)
               -- |> World.update (applySpeed model.speeding baseFrame)
-              |> World.simulate (Duration.seconds (dt / 1000))
+              |> World.simulate (Duration.seconds (1 / 60)) -- Use fixed value to avoid missing collisions
       }
 
     Resize width height ->
@@ -182,6 +185,7 @@ initialWorld =
     |> World.add bottomPlate
     |> addBodies borders
     |> World.add ball
+    |> addBodies flippers
 
 addBodies : List (Body Data) -> World Data -> World Data
 addBodies bodies world = List.foldr World.add world bodies
@@ -193,6 +197,64 @@ floor : Body Data
 floor =
   Body.plane { name = "floor", mesh = WebGL.triangles [], color = defaultColor }
     |> Body.moveTo (Point3d.centimeters 0 0 0)
+
+flippers : List (Body Data)
+flippers =
+  let
+    blocks =
+      [ Block3d.centeredOn
+          Frame3d.atOrigin
+          ( Length.centimeters 10
+          , Length.centimeters 0.01
+          , Length.centimeters 2
+          )
+          |> Block3d.translateBy
+              (Vector3d.centimeters -5 0 0)
+          |> Block3d.rotateAround Axis3d.z
+              (Angle.degrees 5)
+          |> Block3d.translateBy
+              (Vector3d.centimeters 10 0 0)
+      , Block3d.centeredOn
+          Frame3d.atOrigin
+          ( Length.centimeters 10
+          , Length.centimeters 0.01
+          , Length.centimeters 2
+          )
+          |> Block3d.translateBy
+              (Vector3d.centimeters -5 0 0)
+          |> Block3d.rotateAround Axis3d.z
+              (Angle.degrees -5)
+          |> Block3d.translateBy
+              (Vector3d.centimeters 10 0 0)
+      ]
+
+    sphere =
+      Sphere3d.atOrigin (Length.centimeters 1.0)
+        |> Sphere3d.translateBy
+              (Vector3d.centimeters 0 0 0)
+
+    flipperShape =
+      Shape.sphere sphere :: List.map Shape.block blocks
+
+    flipperMesh =
+      WebGL.triangles (List.concatMap Meshes.block blocks ++ Meshes.sphere 2 sphere)
+  in
+    [ Body.compound
+        flipperShape
+        { name = "flipper-left"
+        , mesh = flipperMesh
+        , color = Vec3.vec3 0 1 0
+        }
+        |> Body.moveTo (Point3d.centimeters -12 -50 1)
+    , Body.compound
+        flipperShape
+        { name = "flipper-right"
+        , mesh = flipperMesh
+        , color = Vec3.vec3 0 1 0
+        }
+        |> Body.rotateAround Axis3d.z (Angle.radians pi)
+        |> Body.moveTo (Point3d.centimeters 12 -50 1)
+    ]
 
 bottomPlate : Body Data
 bottomPlate =
@@ -206,7 +268,7 @@ bottomPlate =
         )
   in
     Body.block block3d
-      { name = "slope"
+      { name = "bottom-plate"
       , mesh = WebGL.triangles (Meshes.block block3d)
       , color = defaultColor
       }
