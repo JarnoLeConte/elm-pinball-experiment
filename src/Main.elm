@@ -36,6 +36,7 @@ import Mass
 -- w0rm/elm-physics
 import Physics.Body as Body exposing (Body)
 import Physics.World as World exposing (World)
+import Physics.Material as Material
 
 -- local imports
 import Meshes exposing (Attributes)
@@ -60,8 +61,9 @@ type alias Camera =
   }
 
 type alias Data =
-  { mesh : Mesh Attributes
-  , name : String
+  { name : String
+  , mesh : Mesh Attributes
+  , color : Vec3
   }
 
 type alias Model =
@@ -127,13 +129,13 @@ init _ =
 update : Msg -> Model -> Model
 update msg model =
   case msg of
-    Tick _ ->
+    Tick dt ->
       { model
         | world =
             model.world
               -- |> World.constrain (constrainCar model.steering)
               -- |> World.update (applySpeed model.speeding baseFrame)
-              |> World.simulate (Duration.seconds (1 / 60))
+              |> World.simulate (Duration.seconds (dt / 1000))
       }
 
     Resize width height ->
@@ -184,9 +186,12 @@ initialWorld =
 addBodies : List (Body Data) -> World Data -> World Data
 addBodies bodies world = List.foldr World.add world bodies
 
+defaultColor : Vec3
+defaultColor = Vec3.vec3 0.9 0.9 0.9
+
 floor : Body Data
 floor =
-  Body.plane { name = "floor", mesh = WebGL.triangles [] }
+  Body.plane { name = "floor", mesh = WebGL.triangles [], color = defaultColor }
     |> Body.moveTo (Point3d.centimeters 0 0 0)
 
 bottomPlate : Body Data
@@ -203,12 +208,14 @@ bottomPlate =
     Body.block block3d
       { name = "slope"
       , mesh = WebGL.triangles (Meshes.block block3d)
+      , color = defaultColor
       }
       |> Body.moveTo (Point3d.centimeters 0 0 -0.5)
 
 borders : List (Body Data)
 borders =
   let
+    color = Vec3.vec3 0 0 1
     block3d =
       Block3d.centeredOn
         Frame3d.atOrigin
@@ -218,20 +225,24 @@ borders =
         )
   in
     [ Body.block block3d
-        { name = "border1"
+        { name = "border-left"
         , mesh = WebGL.triangles (Meshes.block block3d)
+        , color = color
         }
         |> Body.moveTo (Point3d.centimeters -17.5 -59 2.5)
     , Body.block block3d
-        { name = "border2"
+        { name = "border-right"
         , mesh = WebGL.triangles (Meshes.block block3d)
+        , color = color
         }
         |> Body.moveTo (Point3d.centimeters 17.5 -59 2.5)
     , Body.block block3d
-        { name = "border3"
+        { name = "border-exit"
         , mesh = WebGL.triangles (Meshes.block block3d)
+        , color = color
         }
         |> Body.moveTo (Point3d.centimeters 0 -61 2.5)
+        |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0.4 })
     ]
 
 
@@ -244,6 +255,7 @@ ball =
     Body.sphere sphere
       { name = "ball"
       , mesh = WebGL.triangles (Meshes.sphere 2 sphere)
+      , color = Vec3.vec3 1 0 0
       }
       |> Body.withBehavior (Body.dynamic (Mass.grams 80))
       |> Body.moveTo (Point3d.centimeters 0 70 1)
@@ -268,12 +280,12 @@ type alias Uniforms =
   , lightDirection : Vec3
   }
 
-uniforms : Canvas -> Camera -> Body data -> Uniforms
+uniforms : Canvas -> Camera -> Body Data -> Uniforms
 uniforms canvas camera body =
   { camera = Mat4.makeLookAt (Vec3.fromRecord camera.from) (Vec3.fromRecord camera.to) Vec3.j
   , perspective = Mat4.makePerspective 45 (canvas.width / canvas.height) 0.1 100
   , transform = Frame3d.toMat4 (Body.frame body)
-  , color = Vec3.vec3 0.9 0.9 0.9
+  , color = (Body.data body).color
   , lightDirection = Vec3.normalize (Vec3.vec3 0 -1 -1)
   }
 
