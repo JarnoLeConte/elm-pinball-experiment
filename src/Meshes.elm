@@ -1,9 +1,11 @@
 module Meshes exposing
   ( Attributes
   , block
+  , sphere
   )
 
 import Block3d exposing (Block3d)
+import Sphere3d exposing (Sphere3d)
 import Length exposing (Meters)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Physics.Coordinates exposing (BodyCoordinates)
@@ -52,6 +54,68 @@ block block3d =
     , facet v1 v2 v6
     , facet v6 v5 v1
     ]
+
+sphere : Int -> Sphere3d Meters BodyCoordinates -> List ( Attributes, Attributes, Attributes )
+sphere iterations sphere3d =
+  let
+    position p =
+      Point3d.toMeters (Sphere3d.centerPoint sphere3d)
+        |> Vec3.fromRecord
+        |> Vec3.add p
+
+    radius =
+      Length.inMeters (Sphere3d.radius sphere3d)
+  in
+    divideSphere iterations radius (octahedron radius)
+      |> List.map
+        (\( p1, p2, p3 ) ->
+          facet (position p1) (position p2) (position p3)
+        )
+
+{-| Recursively divide an octahedron to turn it into a sphere
+-}
+divideSphere : Int -> Float -> List ( Vec3, Vec3, Vec3 ) -> List ( Vec3, Vec3, Vec3 )
+divideSphere step radius triangles =
+  if step == 0 then
+    triangles
+  else
+    triangles
+      |> List.foldl (divide radius) []
+      |> divideSphere (step - 1) radius
+
+{-|
+
+        1
+       / \
+    b /___\ c
+     /\   /\
+    /__\ /__\
+    0   a    2
+
+-}
+divide : Float -> ( Vec3, Vec3, Vec3 ) -> List ( Vec3, Vec3, Vec3 ) -> List ( Vec3, Vec3, Vec3 )
+divide radius ( v0, v1, v2 ) result =
+  let
+    a = Vec3.add v0 v2 |> Vec3.normalize |> Vec3.scale radius
+    b = Vec3.add v0 v1 |> Vec3.normalize |> Vec3.scale radius
+    c = Vec3.add v1 v2 |> Vec3.normalize |> Vec3.scale radius
+  in
+    ( v0, b, a ) :: ( b, v1, c ) :: ( a, b, c ) :: ( a, c, v2 ) :: result
+
+
+{-| Octahedron
+-}
+octahedron : Float -> List ( Vec3, Vec3, Vec3 )
+octahedron radius =
+  [ ( Vec3.vec3 radius 0 0, Vec3.vec3 0 radius 0, Vec3.vec3 0 0 radius )
+  , ( Vec3.vec3 0 radius 0, Vec3.vec3 -radius 0 0, Vec3.vec3 0 0 radius )
+  , ( Vec3.vec3 -radius 0 0, Vec3.vec3 0 -radius 0, Vec3.vec3 0 0 radius )
+  , ( Vec3.vec3 0 -radius 0, Vec3.vec3 radius 0 0, Vec3.vec3 0 0 radius )
+  , ( Vec3.vec3 radius 0 0, Vec3.vec3 0 0 -radius, Vec3.vec3 0 radius 0 )
+  , ( Vec3.vec3 0 radius 0, Vec3.vec3 0 0 -radius, Vec3.vec3 -radius 0 0 )
+  , ( Vec3.vec3 -radius 0 0, Vec3.vec3 0 0 -radius, Vec3.vec3 0 -radius 0 )
+  , ( Vec3.vec3 0 -radius 0, Vec3.vec3 0 0 -radius, Vec3.vec3 radius 0 0 )
+  ]
 
 facet : Vec3 -> Vec3 -> Vec3 -> ( Attributes, Attributes, Attributes )
 facet a b c =

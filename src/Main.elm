@@ -20,17 +20,18 @@ import Math.Matrix4 as Mat4 exposing (Mat4)
 import Geometry.Interop.LinearAlgebra.Frame3d as Frame3d
 
 -- ianmackenzie/elm-geometry
-import Axis3d
 import Block3d
 import Direction3d
 import Frame3d
 import Point3d
+import Sphere3d
 
 -- ianmackenzie/elm-units
 import Acceleration
+import Angle
 import Duration
 import Length
-import Angle
+import Mass
 
 -- w0rm/elm-physics
 import Physics.Body as Body exposing (Body)
@@ -113,8 +114,8 @@ init : () -> ( Model, Cmd Msg )
 init _ =
   ( { canvas = { width = 1, height = 1 }
     , camera =
-        { from = { x = -60, y = 60, z = 40 }
-        , to = { x = 0, y = -7, z = 0 }
+        { from = { x = 0, y = -0.9, z = 1.0 }
+        , to = { x = 0, y = -0.17, z = 0 }
         }
     , world = initialWorld
     , leftFlipper = 0
@@ -174,32 +175,46 @@ view { world, camera, canvas } =
 initialWorld : World Data
 initialWorld =
   World.empty
-    |> World.withGravity (Acceleration.metersPerSecondSquared 9.80665) Direction3d.negativeZ
+    |> World.withGravity (Acceleration.metersPerSecondSquared 9.80665) (Direction3d.zy (Angle.degrees -160))
     |> World.add floor
-    |> World.add slope
+    |> World.add bottomPlate
+    |> World.add ball
 
 floor : Body Data
 floor =
   Body.plane { name = "floor", mesh = WebGL.triangles [] }
-    |> Body.moveTo (Point3d.fromMeters { x = 0, y = 0, z = -1 })
+    |> Body.moveTo (Point3d.centimeters 0 0 0)
 
-slope : Body Data
-slope =
+bottomPlate : Body Data
+bottomPlate =
   let
     block3d =
       Block3d.centeredOn
         Frame3d.atOrigin
-        ( Length.meters 10
-        , Length.meters 16
-        , Length.meters 0.5
+        ( Length.centimeters 72
+        , Length.centimeters 130
+        , Length.centimeters 1
         )
   in
     Body.block block3d
       { name = "slope"
       , mesh = WebGL.triangles (Meshes.block block3d)
       }
-      |> Body.rotateAround Axis3d.x (Angle.radians (pi / 16))
-      |> Body.moveTo (Point3d.meters 0 -2 1)
+      |> Body.moveTo (Point3d.centimeters 0 0 -0.5)
+
+
+ball : Body Data
+ball =
+  let
+    sphere =
+      Sphere3d.atOrigin (Length.centimeters 1.35)
+  in
+    Body.sphere sphere
+      { name = "ball"
+      , mesh = WebGL.triangles (Meshes.sphere 2 sphere)
+      }
+      |> Body.withBehavior (Body.dynamic (Mass.grams 80))
+      |> Body.moveTo (Point3d.centimeters 0 70 1)
 
 
 -- WebGL rendering
@@ -223,8 +238,8 @@ type alias Uniforms =
 
 uniforms : Canvas -> Camera -> Body data -> Uniforms
 uniforms canvas camera body =
-  { camera = Mat4.makeLookAt (Vec3.fromRecord camera.from) (Vec3.fromRecord camera.to) Vec3.k
-  , perspective = Mat4.makePerspective 24 (canvas.width / canvas.height) 5 2000
+  { camera = Mat4.makeLookAt (Vec3.fromRecord camera.from) (Vec3.fromRecord camera.to) Vec3.j
+  , perspective = Mat4.makePerspective 45 (canvas.width / canvas.height) 0.1 100
   , transform = Frame3d.toMat4 (Body.frame body)
   , color = Vec3.vec3 0.9 0.9 0.9
   , lightDirection = Vec3.normalize (Vec3.vec3 -1 -1 -1)
