@@ -180,7 +180,7 @@ view { world, camera, canvas } =
 initialWorld : World Data
 initialWorld =
   World.empty
-    |> World.withGravity (Acceleration.metersPerSecondSquared 9.80665) (Direction3d.zy (Angle.degrees -160))
+    |> World.withGravity (Acceleration.metersPerSecondSquared 9.80665) (Direction3d.zy (Angle.degrees -175))
     |> World.add floor
     |> World.add bottomPlate
     |> addBodies borders
@@ -197,6 +197,7 @@ floor : Body Data
 floor =
   Body.plane { name = "floor", mesh = WebGL.triangles [], color = defaultColor }
     |> Body.moveTo (Point3d.centimeters 0 0 0)
+    |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0 })
 
 flippers : List (Body Data)
 flippers =
@@ -273,6 +274,7 @@ bottomPlate =
       , color = defaultColor
       }
       |> Body.moveTo (Point3d.centimeters 0 0 -0.5)
+      |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0 })
 
 borders : List (Body Data)
 borders =
@@ -292,19 +294,21 @@ borders =
         , color = color
         }
         |> Body.moveTo (Point3d.centimeters -17.5 -59 2.5)
+        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
     , Body.block block3d
         { name = "border-right"
         , mesh = WebGL.triangles (Meshes.block block3d)
         , color = color
         }
         |> Body.moveTo (Point3d.centimeters 17.5 -59 2.5)
+        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
     , Body.block block3d
         { name = "border-exit"
         , mesh = WebGL.triangles (Meshes.block block3d)
         , color = color
         }
         |> Body.moveTo (Point3d.centimeters 0 -61 2.5)
-        |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0.4 })
+        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
     ]
 
 
@@ -321,6 +325,7 @@ ball =
       }
       |> Body.withBehavior (Body.dynamic (Mass.grams 80))
       |> Body.moveTo (Point3d.centimeters 0 70 1)
+      |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
 
 
 -- WebGL rendering
