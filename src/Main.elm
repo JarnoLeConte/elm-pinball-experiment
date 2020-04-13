@@ -34,10 +34,13 @@ import Angle
 import Duration
 import Length
 import Mass
+import Force
+import Quantity
 
 -- w0rm/elm-physics
 import Physics.Body as Body exposing (Body)
 import Physics.World as World exposing (World)
+import Physics.Constraint as Constraint exposing (Constraint)
 import Physics.Material as Material
 import Physics.Shape as Shape
 
@@ -73,8 +76,8 @@ type alias Model =
   { canvas : Canvas
   , camera : Camera
   , world : World Data
-  , leftFlipper : Float
-  , rightFlipper : Float
+  , leftFlipper : Bool
+  , rightFlipper : Bool
   }
 
 type Command
@@ -123,8 +126,8 @@ init _ =
         , to = { x = 0, y = -0.17, z = 0 }
         }
     , world = initialWorld
-    , leftFlipper = 0
-    , rightFlipper = 0
+    , leftFlipper = False
+    , rightFlipper = False
     }
   , Task.perform (\{ viewport } -> Resize viewport.width viewport.height) Browser.Dom.getViewport
   )
@@ -136,8 +139,8 @@ update msg model =
       { model
         | world =
             model.world
-              -- |> World.constrain (constrainCar model.steering)
-              -- |> World.update (applySpeed model.speeding baseFrame)
+              |> World.constrain constrainFlipper
+              |> World.update (updateWorld model)
               |> World.simulate (Duration.seconds (1 / 60)) -- Use fixed value to avoid missing collisions
       }
 
@@ -145,8 +148,12 @@ update msg model =
       let { canvas } = model
       in { model |  canvas = { canvas | width = width, height = height } }
 
+    KeyDown LeftFlipper -> { model | leftFlipper = True }
+    KeyDown RightFlipper -> { model | rightFlipper = True }
     KeyDown _ -> model
 
+    KeyUp LeftFlipper -> { model | leftFlipper = False }
+    KeyUp RightFlipper -> { model | rightFlipper = False }
     KeyUp _ -> model
 
 subscriptions : Model -> Sub Msg
@@ -176,19 +183,18 @@ view { world, camera, canvas } =
         (List.map (bodyToEntity canvas camera) (World.bodies world))
     ]
 
-
 initialWorld : World Data
 initialWorld =
   World.empty
-    |> World.withGravity (Acceleration.metersPerSecondSquared 9.80665) (Direction3d.zy (Angle.degrees -175))
     |> World.add floor
     |> World.add bottomPlate
     |> addBodies borders
-    |> World.add ball
     |> addBodies flippers
+    |> World.add ball
 
 addBodies : List (Body Data) -> World Data -> World Data
 addBodies bodies world = List.foldr World.add world bodies
+
 
 defaultColor : Vec3
 defaultColor = Vec3.vec3 0.9 0.9 0.9
@@ -206,7 +212,7 @@ flippers =
       [ Block3d.centeredOn
           Frame3d.atOrigin
           ( Length.centimeters 10
-          , Length.centimeters 0.01
+          , Length.centimeters 0.5
           , Length.centimeters 2
           )
           |> Block3d.translateBy
@@ -218,7 +224,7 @@ flippers =
       , Block3d.centeredOn
           Frame3d.atOrigin
           ( Length.centimeters 10
-          , Length.centimeters 0.01
+          , Length.centimeters 0.5
           , Length.centimeters 2
           )
           |> Block3d.translateBy
@@ -230,7 +236,7 @@ flippers =
       ]
 
     sphere =
-      Sphere3d.atOrigin (Length.centimeters 1.0)
+      Sphere3d.atOrigin (Length.centimeters 1.2)
         |> Sphere3d.translateBy
               (Vector3d.centimeters 0 0 0)
 
@@ -246,15 +252,19 @@ flippers =
         , mesh = flipperMesh
         , color = Vec3.vec3 0 1 0
         }
-        |> Body.moveTo (Point3d.centimeters -12 -50 1)
+        |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0 })
+        |> Body.withBehavior (Body.dynamic (Mass.grams 500))
+        |> Body.moveTo (Point3d.centimeters -10 -53 3)
     , Body.compound
         flipperShape
         { name = "flipper-right"
         , mesh = flipperMesh
         , color = Vec3.vec3 0 1 0
         }
+        |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0 })
+        |> Body.withBehavior (Body.dynamic (Mass.grams 500))
         |> Body.rotateAround Axis3d.z (Angle.radians pi)
-        |> Body.moveTo (Point3d.centimeters 12 -50 1)
+        |> Body.moveTo (Point3d.centimeters 10 -53 3)
     ]
 
 bottomPlate : Body Data
@@ -287,30 +297,57 @@ borders =
         , Length.centimeters 2
         , Length.centimeters 5
         )
+    sideBlock =
+      Block3d.centeredOn
+        Frame3d.atOrigin
+        ( Length.centimeters 2
+        , Length.centimeters 120
+        , Length.centimeters 5
+        )
+    topBlock =
+      Block3d.centeredOn
+        Frame3d.atOrigin
+        ( Length.centimeters 60
+        , Length.centimeters 2
+        , Length.centimeters 5
+        )
   in
     [ Body.block block3d
+        { name = "border-bottom1"
+        , mesh = WebGL.triangles (Meshes.block block3d)
+        , color = color
+        }
+        |> Body.moveTo (Point3d.centimeters -15.5 -59 2.5)
+        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
+    , Body.block block3d
+        { name = "border-bottom2"
+        , mesh = WebGL.triangles (Meshes.block block3d)
+        , color = color
+        }
+        |> Body.moveTo (Point3d.centimeters 15.5 -59 2.5)
+        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
+    , Body.block sideBlock
         { name = "border-left"
-        , mesh = WebGL.triangles (Meshes.block block3d)
+        , mesh = WebGL.triangles (Meshes.block sideBlock)
         , color = color
         }
-        |> Body.moveTo (Point3d.centimeters -17.5 -59 2.5)
+        |> Body.moveTo (Point3d.centimeters -29 0 2.5)
         |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
-    , Body.block block3d
-        { name = "border-right"
-        , mesh = WebGL.triangles (Meshes.block block3d)
+    , Body.block sideBlock
+        { name = "border-left"
+        , mesh = WebGL.triangles (Meshes.block sideBlock)
         , color = color
         }
-        |> Body.moveTo (Point3d.centimeters 17.5 -59 2.5)
+        |> Body.moveTo (Point3d.centimeters 29 0 2.5)
         |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
-    , Body.block block3d
-        { name = "border-exit"
-        , mesh = WebGL.triangles (Meshes.block block3d)
+    , Body.block topBlock
+        { name = "border-top"
+        , mesh = WebGL.triangles (Meshes.block topBlock)
         , color = color
         }
-        |> Body.moveTo (Point3d.centimeters 0 -61 2.5)
+        |> Body.moveTo (Point3d.centimeters 0 59 2.5)
         |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
     ]
-
 
 ball : Body Data
 ball =
@@ -324,8 +361,85 @@ ball =
       , color = Vec3.vec3 1 0 0
       }
       |> Body.withBehavior (Body.dynamic (Mass.grams 80))
-      |> Body.moveTo (Point3d.centimeters 0 70 1)
-      |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
+      |> Body.moveTo (Point3d.centimeters -5 50 1.35)
+      |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0.9 })
+
+
+-- constraints
+
+constrainFlipper : Body Data -> Body Data -> List Constraint
+constrainFlipper b1 b2 =
+  let
+    hingeLeftFlipper =
+      Constraint.hinge
+        (Axis3d.through
+          (Point3d.centimeters -10.2 -53 0)
+          (Direction3d.unsafe { x = 0, y = 0, z = 1 })
+        )
+        (Axis3d.through
+          (Point3d.centimeters 0 0 0)
+          (Direction3d.unsafe { x = 0, y = 0, z = -1 })
+        )
+
+    hingeRightFlipper =
+      Constraint.hinge
+        (Axis3d.through
+          (Point3d.centimeters 10.2 -53 0)
+          (Direction3d.unsafe { x = 0, y = 0, z = 1 })
+        )
+        (Axis3d.through
+          (Point3d.centimeters 0 0 0)
+          (Direction3d.unsafe { x = 0, y = 0, z = -1 })
+        )
+  in
+    case ( (Body.data b1).name, (Body.data b2).name ) of
+      ( "bottom-plate", "flipper-left" ) -> [ hingeLeftFlipper ]
+      ( "bottom-plate", "flipper-right" ) -> [ hingeRightFlipper ]
+      _ -> []
+
+-- Model update
+
+updateWorld : Model -> Body Data -> Body Data
+updateWorld model body =
+  case (Body.data body).name of
+    "flipper-left" ->
+      let
+        direction =
+          if model.leftFlipper then
+            Direction3d.positiveY
+          else
+            Direction3d.negativeY
+
+        point =
+          Frame3d.originPoint (Body.frame body)
+            |> Point3d.translateBy (Vector3d.centimeters 1 0 0)
+      in
+        body
+          |> Body.applyForce (Force.newtons 10.3) direction point
+
+    "flipper-right" ->
+      let
+        direction =
+          if model.rightFlipper then
+            Direction3d.positiveY
+          else
+            Direction3d.negativeY
+
+        point =
+          Frame3d.originPoint (Body.frame body)
+            |> Point3d.translateBy (Vector3d.centimeters -1 0 0)
+      in
+        body
+          |> Body.applyForce (Force.newtons 10.3) direction point
+
+    "ball" ->
+      body
+        |> Body.applyForce
+            (Quantity.times (Acceleration.metersPerSecondSquared 9.80665) (Mass.grams 80))
+            (Direction3d.zy (Angle.degrees -175))
+            (Frame3d.originPoint (Body.frame body))
+    _ ->
+      body
 
 
 -- WebGL rendering
@@ -378,11 +492,11 @@ vertexShader =
 
 fragmentShader : Shader {} Uniforms { vlighting : Float }
 fragmentShader =
-    [glsl|
-        precision mediump float;
-        uniform vec3 color;
-        varying float vlighting;
-        void main () {
-          gl_FragColor = vec4(vlighting * color, 1.0);
-        }
-    |]
+  [glsl|
+    precision mediump float;
+    uniform vec3 color;
+    varying float vlighting;
+    void main () {
+      gl_FragColor = vec4(vlighting * color, 1.0);
+    }
+  |]
