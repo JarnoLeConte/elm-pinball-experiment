@@ -4,7 +4,7 @@ module Main exposing (main)
 import Browser
 import Browser.Events
 import Browser.Dom
-import Json.Decode
+import Json.Decode as Decode
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Task
@@ -74,6 +74,7 @@ type alias Data =
 
 type alias Model =
   { canvas : Canvas
+  , mouse : (Float, Float)
   , camera : Camera
   , world : World Data
   , leftFlipper : Bool
@@ -85,27 +86,36 @@ type Command
   | RightFlipper
   | Launcher
 
-keyDecoder : (Command -> Msg) -> Json.Decode.Decoder Msg
+keyDecoder : (Command -> Msg) -> Decode.Decoder Msg
 keyDecoder toMsg =
-  Json.Decode.field "key" Json.Decode.string
-    |> Json.Decode.andThen
+  Decode.field "key" Decode.string
+    |> Decode.andThen
       (\string ->
         case string of
           "ArrowLeft" ->
-            Json.Decode.succeed (toMsg LeftFlipper)
+            Decode.succeed (toMsg LeftFlipper)
           "ArrowRight" ->
-            Json.Decode.succeed (toMsg RightFlipper)
+            Decode.succeed (toMsg RightFlipper)
           "ArrowDown" ->
-            Json.Decode.succeed (toMsg Launcher)
+            Decode.succeed (toMsg Launcher)
           _ ->
-            Json.Decode.fail ("Unrecognized key: " ++ string)
+            Decode.fail ("Unrecognized key: " ++ string)
       )
+
+mouseDecoder : Decode.Decoder (Float, Float)
+mouseDecoder =
+  Decode.map4 (\x y w h -> (x / w, y / h))
+    (Decode.field "pageX" Decode.float)
+    (Decode.field "pageY" Decode.float)
+    (Decode.at ["currentTarget","defaultView","innerWidth"] Decode.float)
+    (Decode.at ["currentTarget","defaultView","innerHeight"] Decode.float)
 
 type Msg
   = Tick Float
   | Resize Float Float
   | KeyDown Command
   | KeyUp Command
+  | MouseMove (Float, Float)
 
 
 main : Program () Model Msg
@@ -121,6 +131,7 @@ main =
 init : () -> ( Model, Cmd Msg )
 init _ =
   ( { canvas = { width = 1, height = 1 }
+    , mouse = (0.5, 0.5)
     , camera =
         { from = { x = 0, y = -0.9, z = 1.0 }
         , to = { x = 0, y = -0.17, z = 0 }
@@ -156,17 +167,20 @@ update msg model =
     KeyUp RightFlipper -> { model | rightFlipper = False }
     KeyUp _ -> model
 
+    MouseMove (x, y) -> { model | mouse = (x, y) }
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
   Sub.batch
     [ Browser.Events.onResize (\w h -> Resize (toFloat w) (toFloat h))
     , Browser.Events.onAnimationFrameDelta Tick
+    , Browser.Events.onMouseMove (Decode.map MouseMove mouseDecoder)
     , Browser.Events.onKeyDown (keyDecoder KeyDown)
     , Browser.Events.onKeyUp (keyDecoder KeyUp)
     ]
 
 view : Model -> Html Msg
-view { world, camera, canvas } =
+view model =
   Html.div []
     [ WebGL.toHtmlWith
         [ WebGL.depth 1
@@ -174,13 +188,13 @@ view { world, camera, canvas } =
         , WebGL.antialias
         , WebGL.clearColor 0.3 0.3 0.3 1
         ]
-        [ Attr.width (round canvas.width)
-        , Attr.height (round canvas.height)
+        [ Attr.width (round model.canvas.width)
+        , Attr.height (round model.canvas.height)
         , Attr.style "position" "absolute"
         , Attr.style "top" "0"
         , Attr.style "left" "0"
         ]
-        (List.map (bodyToEntity canvas camera) (World.bodies world))
+        (List.map (bodyToEntity model) (World.bodies model.world))
     ]
 
 initialWorld : World Data
@@ -444,13 +458,13 @@ updateWorld model body =
 
 -- WebGL rendering
 
-bodyToEntity : Canvas -> Camera -> Body Data -> Entity
-bodyToEntity canvas camera body =
+bodyToEntity : Model -> Body Data -> Entity
+bodyToEntity model body =
   WebGL.entity
     vertexShader
     fragmentShader
     (Body.data body).mesh
-    (uniforms canvas camera body)
+    (uniforms model body)
 
 
 type alias Uniforms =
@@ -461,10 +475,17 @@ type alias Uniforms =
   , lightDirection : Vec3
   }
 
-uniforms : Canvas -> Camera -> Body Data -> Uniforms
-uniforms canvas camera body =
-  { camera = Mat4.makeLookAt (Vec3.fromRecord camera.from) (Vec3.fromRecord camera.to) Vec3.j
-  , perspective = Mat4.makePerspective 45 (canvas.width / canvas.height) 0.1 100
+cameraPosition : (Float, Float) -> Vec3
+cameraPosition (mouseX, mouseY) =
+  Vec3.vec3
+    0
+    (-mouseY * 2)
+    (2 - mouseY * 2)
+
+uniforms : Model -> Body Data -> Uniforms
+uniforms model body =
+  { camera = Mat4.makeLookAt (cameraPosition model.mouse) (Vec3.fromRecord model.camera.to) Vec3.j
+  , perspective = Mat4.makePerspective 45 (model.canvas.width / model.canvas.height) 0.1 100
   , transform = Frame3d.toMat4 (Body.frame body)
   , color = (Body.data body).color
   , lightDirection = Vec3.normalize (Vec3.vec3 0 -1 -1)
