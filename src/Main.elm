@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 -- elm
+import Debug exposing (log)
 import Browser
 import Browser.Events
 import Browser.Dom
@@ -202,7 +203,7 @@ initialWorld =
   World.empty
     |> World.add floor
     |> World.add bottomPlate
-    |> addBodies borders
+    |> World.add border
     |> addBodies flippers
     |> World.add ball
 
@@ -217,68 +218,41 @@ floor : Body Data
 floor =
   Body.plane { name = "floor", mesh = WebGL.triangles [], color = defaultColor }
     |> Body.moveTo (Point3d.centimeters 0 0 0)
-    |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0 })
+    |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0 })
 
 flippers : List (Body Data)
 flippers =
   let
-    blocks =
-      [ Block3d.centeredOn
-          Frame3d.atOrigin
-          ( Length.centimeters 10
-          , Length.centimeters 0.5
-          , Length.centimeters 2
-          )
-          |> Block3d.translateBy
-              (Vector3d.centimeters -5 0 0)
-          |> Block3d.rotateAround Axis3d.z
-              (Angle.degrees 5)
-          |> Block3d.translateBy
-              (Vector3d.centimeters 10 0 0)
-      , Block3d.centeredOn
-          Frame3d.atOrigin
-          ( Length.centimeters 10
-          , Length.centimeters 0.5
-          , Length.centimeters 2
-          )
-          |> Block3d.translateBy
-              (Vector3d.centimeters -5 0 0)
-          |> Block3d.rotateAround Axis3d.z
-              (Angle.degrees -5)
-          |> Block3d.translateBy
-              (Vector3d.centimeters 10 0 0)
-      ]
-
-    sphere =
-      Sphere3d.atOrigin (Length.centimeters 1.2)
-        |> Sphere3d.translateBy
-              (Vector3d.centimeters 0 0 0)
-
-    flipperShape =
-      Shape.sphere sphere :: List.map Shape.block blocks
+    block =
+      Block3d.centeredOn
+        Frame3d.atOrigin
+        ( Length.centimeters 10
+        , Length.centimeters 2
+        , Length.centimeters 2
+        )
+        |> Block3d.translateBy
+            (Vector3d.centimeters 5 0 0)
 
     flipperMesh =
-      WebGL.triangles (List.concatMap Meshes.block blocks ++ Meshes.sphere 2 sphere)
+      WebGL.triangles (Meshes.block block)
   in
-    [ Body.compound
-        flipperShape
+    [ Body.block block
         { name = "flipper-left"
         , mesh = flipperMesh
         , color = Vec3.vec3 0 1 0
         }
-        |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0 })
-        |> Body.withBehavior (Body.dynamic (Mass.grams 500))
-        |> Body.moveTo (Point3d.centimeters -10 -53 3)
-    , Body.compound
-        flipperShape
+        |> Body.withMaterial (Material.custom { friction = 1, bounciness = 0 })
+        |> Body.withBehavior (Body.dynamic (Mass.grams 1500))
+        |> Body.moveTo (Point3d.centimeters -9 -53 1)
+    , Body.block block
         { name = "flipper-right"
         , mesh = flipperMesh
         , color = Vec3.vec3 0 1 0
         }
-        |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0 })
-        |> Body.withBehavior (Body.dynamic (Mass.grams 500))
+        |> Body.withMaterial (Material.custom { friction = 1, bounciness = 0 })
+        |> Body.withBehavior (Body.dynamic (Mass.grams 1500))
         |> Body.rotateAround Axis3d.z (Angle.radians pi)
-        |> Body.moveTo (Point3d.centimeters 10 -53 3)
+        |> Body.moveTo (Point3d.centimeters 9 -53 1)
     ]
 
 bottomPlate : Body Data
@@ -297,77 +271,76 @@ bottomPlate =
       , mesh = WebGL.triangles (Meshes.block block3d)
       , color = defaultColor
       }
-      |> Body.moveTo (Point3d.centimeters 0 0 -0.5)
-      |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0 })
+      |> Body.moveTo (Point3d.centimeters 0 0 -0.6)
+      |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0 })
 
-borders : List (Body Data)
-borders =
+border : Body Data
+border =
   let
     color = Vec3.vec3 0 0 1
-    block3d =
+    bottomBlock =
       Block3d.centeredOn
         Frame3d.atOrigin
         ( Length.centimeters 25
         , Length.centimeters 2
-        , Length.centimeters 5
+        , Length.centimeters 2
         )
+    bottomBlock1 =
+      bottomBlock
+        |> Block3d.translateBy (Vector3d.centimeters -15.5 -59 1)
+        -- |> Block3d.moveTo (Point3d.centimeters -15.5 -59 1)
+    bottomBlock2 =
+      bottomBlock
+        |> Block3d.translateBy (Vector3d.centimeters 15.5 -59 1)
     sideBlock =
       Block3d.centeredOn
         Frame3d.atOrigin
         ( Length.centimeters 2
         , Length.centimeters 120
-        , Length.centimeters 5
+        , Length.centimeters 2
         )
+    leftBlock =
+      sideBlock
+        |> Block3d.translateBy (Vector3d.centimeters -29 0 1)
+    rightBlock =
+      sideBlock
+        |> Block3d.translateBy (Vector3d.centimeters 29 0 1)
     topBlock =
       Block3d.centeredOn
         Frame3d.atOrigin
         ( Length.centimeters 60
         , Length.centimeters 2
-        , Length.centimeters 5
+        , Length.centimeters 2
         )
+        |> Block3d.translateBy (Vector3d.centimeters 0 59 1)
+
+    blocks =
+      [ bottomBlock1
+      , bottomBlock2
+      , leftBlock
+      , rightBlock
+      , topBlock
+      ]
+
+    shape =
+      List.map Shape.block blocks
+
+    mesh =
+      WebGL.triangles (List.concatMap Meshes.block blocks)
   in
-    [ Body.block block3d
-        { name = "border-bottom1"
-        , mesh = WebGL.triangles (Meshes.block block3d)
-        , color = color
-        }
-        |> Body.moveTo (Point3d.centimeters -15.5 -59 2.5)
-        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
-    , Body.block block3d
-        { name = "border-bottom2"
-        , mesh = WebGL.triangles (Meshes.block block3d)
-        , color = color
-        }
-        |> Body.moveTo (Point3d.centimeters 15.5 -59 2.5)
-        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
-    , Body.block sideBlock
-        { name = "border-left"
-        , mesh = WebGL.triangles (Meshes.block sideBlock)
-        , color = color
-        }
-        |> Body.moveTo (Point3d.centimeters -29 0 2.5)
-        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
-    , Body.block sideBlock
-        { name = "border-left"
-        , mesh = WebGL.triangles (Meshes.block sideBlock)
-        , color = color
-        }
-        |> Body.moveTo (Point3d.centimeters 29 0 2.5)
-        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
-    , Body.block topBlock
-        { name = "border-top"
-        , mesh = WebGL.triangles (Meshes.block topBlock)
-        , color = color
-        }
-        |> Body.moveTo (Point3d.centimeters 0 59 2.5)
-        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.2 })
-    ]
+    Body.compound
+      shape
+      { name = "border"
+      , mesh = mesh
+      , color = color
+      }
+      |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0.2 })
 
 ball : Body Data
 ball =
   let
     sphere =
-      Sphere3d.atOrigin (Length.centimeters 1.35)
+      Sphere3d.atOrigin (Length.centimeters 0.8)
   in
     Body.sphere sphere
       { name = "ball"
@@ -375,8 +348,8 @@ ball =
       , color = Vec3.vec3 1 0 0
       }
       |> Body.withBehavior (Body.dynamic (Mass.grams 80))
-      |> Body.moveTo (Point3d.centimeters -5 50 1.35)
-      |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0.9 })
+      |> Body.moveTo (Point3d.centimeters -5 50 0.8)
+      |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0.1 })
 
 
 -- constraints
@@ -387,29 +360,30 @@ constrainFlipper b1 b2 =
     hingeLeftFlipper =
       Constraint.hinge
         (Axis3d.through
-          (Point3d.centimeters -10.2 -53 0)
+          (Point3d.centimeters -10 -53 0)
           (Direction3d.unsafe { x = 0, y = 0, z = 1 })
         )
         (Axis3d.through
-          (Point3d.centimeters 0 0 0)
+          (Point3d.centimeters 0 0 -1)
           (Direction3d.unsafe { x = 0, y = 0, z = -1 })
         )
 
     hingeRightFlipper =
       Constraint.hinge
         (Axis3d.through
-          (Point3d.centimeters 10.2 -53 0)
+          (Point3d.centimeters 10 -53 0)
           (Direction3d.unsafe { x = 0, y = 0, z = 1 })
         )
         (Axis3d.through
-          (Point3d.centimeters 0 0 0)
+          (Point3d.centimeters 0 0 -1)
           (Direction3d.unsafe { x = 0, y = 0, z = -1 })
         )
   in
     case ( (Body.data b1).name, (Body.data b2).name ) of
-      ( "bottom-plate", "flipper-left" ) -> [ hingeLeftFlipper ]
-      ( "bottom-plate", "flipper-right" ) -> [ hingeRightFlipper ]
+      ( "floor", "flipper-left" ) -> [ hingeLeftFlipper ]
+      ( "floor", "flipper-right" ) -> [ hingeRightFlipper ]
       _ -> []
+
 
 -- Model update
 
@@ -426,7 +400,7 @@ updateWorld model body =
 
         point =
           Frame3d.originPoint (Body.frame body)
-            |> Point3d.translateBy (Vector3d.centimeters 1 0 0)
+            |> Point3d.translateBy (Vector3d.centimeters 5 0 0)
       in
         body
           |> Body.applyForce (Force.newtons 10.3) direction point
@@ -441,7 +415,7 @@ updateWorld model body =
 
         point =
           Frame3d.originPoint (Body.frame body)
-            |> Point3d.translateBy (Vector3d.centimeters -1 0 0)
+            |> Point3d.translateBy (Vector3d.centimeters -5 0 0)
       in
         body
           |> Body.applyForce (Force.newtons 10.3) direction point
@@ -476,11 +450,8 @@ type alias Uniforms =
   }
 
 cameraPosition : (Float, Float) -> Vec3
-cameraPosition (mouseX, mouseY) =
-  Vec3.vec3
-    0
-    (-mouseY * 2)
-    (2 - mouseY * 2)
+cameraPosition (_, mouseY) =
+  Vec3.vec3 0 (-mouseY * 2) (2 - mouseY * 2)
 
 uniforms : Model -> Body Data -> Uniforms
 uniforms model body =
