@@ -153,7 +153,9 @@ update msg model =
             model.world
               |> World.constrain constrainFlipper
               |> World.update (updateWorld model)
-              |> World.simulate (Duration.seconds (1 / 60)) -- Use fixed value to avoid missing collisions
+              |> World.simulate (Duration.seconds (1/180))
+              |> World.simulate (Duration.seconds (1/180))
+              |> World.simulate (Duration.seconds (1/180))
       }
 
     Resize width height ->
@@ -231,7 +233,7 @@ flippers =
         , Length.centimeters 2
         )
         |> Block3d.translateBy
-            (Vector3d.centimeters 5 0 0)
+            (Vector3d.centimeters 4 0 0)
 
     flipperMesh =
       WebGL.triangles (Meshes.block block)
