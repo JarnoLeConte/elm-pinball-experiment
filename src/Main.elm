@@ -42,6 +42,7 @@ import Quantity
 import Physics.Body as Body exposing (Body)
 import Physics.World as World exposing (World)
 import Physics.Constraint as Constraint exposing (Constraint)
+import Physics.Contact as Contact exposing (Contact)
 import Physics.Material as Material
 import Physics.Shape as Shape
 
@@ -152,7 +153,9 @@ update msg model =
         | world =
             model.world
               |> World.constrain constrainFlipper
-              |> World.update (updateWorld model)
+              |> \world ->
+                  let contacts = World.contacts world
+                  in World.update (updateWorld model contacts) world
               |> World.simulate (Duration.seconds (1/180))
               |> World.simulate (Duration.seconds (1/180))
               |> World.simulate (Duration.seconds (1/180))
@@ -206,6 +209,7 @@ initialWorld =
     |> World.add floor
     |> World.add bottomPlate
     |> World.add border
+    |> addBodies bumpers
     |> addBodies flippers
     |> World.add ball
 
@@ -221,6 +225,30 @@ floor =
   Body.plane { name = "floor", mesh = WebGL.triangles [], color = defaultColor }
     |> Body.moveTo (Point3d.centimeters 0 0 0)
     |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0 })
+
+bumpers : List (Body Data)
+bumpers =
+  let
+    sphere =
+      Sphere3d.atOrigin (Length.centimeters 2)
+    makeBumper (x, y) =
+      Body.sphere sphere
+        { name = "bumper"
+        , mesh = WebGL.triangles (Meshes.sphere 2 sphere)
+        , color = Vec3.vec3 0 0 1
+        }
+        |> Body.moveTo (Point3d.centimeters x y 2)
+        |> Body.withMaterial (Material.custom { friction = 0, bounciness = 0.1 })
+  in
+    List.map makeBumper
+      [ (-10, -20)
+      , (-15, 20)
+      , (-3, 10)
+      , (-7, -10)
+      , (10, -20)
+      , (15, -30)
+      , (0, -45)
+      ]
 
 flippers : List (Body Data)
 flippers =
@@ -389,8 +417,23 @@ constrainFlipper b1 b2 =
 
 -- Model update
 
-updateWorld : Model -> Body Data -> Body Data
-updateWorld model body =
+isContactBetween : String -> String -> Contact Data -> Bool
+isContactBetween a b contact =
+  contact
+    |> Contact.bodies
+    |> Tuple.mapBoth Body.data Body.data
+    |> Tuple.mapBoth .name .name
+    |> \tuple -> tuple == (a, b) || tuple == (b, a)
+
+
+isContactBumper : List (Contact Data) -> Bool
+isContactBumper contacts =
+  contacts
+    |> List.any (\c -> List.any (\f -> f c) (List.map (isContactBetween "ball") ["bumper", "border"]))
+
+
+updateWorld : Model -> List (Contact Data) -> Body Data -> Body Data
+updateWorld model contacts body =
   case (Body.data body).name of
     "flipper-left" ->
       let
@@ -428,6 +471,15 @@ updateWorld model body =
             (Quantity.times (Acceleration.metersPerSecondSquared 9.80665) (Mass.grams 80))
             (Direction3d.zy (Angle.degrees -175))
             (Frame3d.originPoint (Body.frame body))
+        |> if isContactBumper contacts then
+              Body.applyImpulse
+                (Quantity.times (Duration.seconds 0.005) (Force.newtons 80))
+                Direction3d.positiveY
+                (Frame3d.originPoint (Body.frame body))
+           else
+              identity
+
+
     _ ->
       body
 
