@@ -55,24 +55,15 @@ type alias Canvas =
   , height : Float
   }
 
-type alias Camera =
-  { from :
-      { x : Float
-      , y : Float
-      , z : Float
-      }
-  , to :
-      { x : Float
-      , y : Float
-      , z : Float
-      }
-  }
-
 type alias Data =
   { name : String
   , mesh : Mesh Attributes
   , color : Vec3
   }
+
+type Camera
+  = Cam3D
+  | Cam2D
 
 type alias Model =
   { canvas : Canvas
@@ -87,6 +78,7 @@ type Command
   = LeftFlipper
   | RightFlipper
   | Launcher
+  | SwitchCamera Camera
 
 keyDecoder : (Command -> Msg) -> Decode.Decoder Msg
 keyDecoder toMsg =
@@ -100,6 +92,10 @@ keyDecoder toMsg =
             Decode.succeed (toMsg RightFlipper)
           "ArrowDown" ->
             Decode.succeed (toMsg Launcher)
+          "2" ->
+            Decode.succeed (toMsg (SwitchCamera Cam2D))
+          "3" ->
+            Decode.succeed (toMsg (SwitchCamera Cam3D))
           _ ->
             Decode.fail ("Unrecognized key: " ++ string)
       )
@@ -134,10 +130,7 @@ init : () -> ( Model, Cmd Msg )
 init _ =
   ( { canvas = { width = 1, height = 1 }
     , mouse = (0.5, 0.5)
-    , camera =
-        { from = { x = 0, y = -0.9, z = 1.0 }
-        , to = { x = 0, y = -0.17, z = 0 }
-        }
+    , camera = Cam3D
     , world = initialWorld
     , leftFlipper = False
     , rightFlipper = False
@@ -167,11 +160,13 @@ update msg model =
 
     KeyDown LeftFlipper -> { model | leftFlipper = True }
     KeyDown RightFlipper -> { model | rightFlipper = True }
+    KeyDown (SwitchCamera cam) -> { model | camera = cam }
     KeyDown _ -> model
 
     KeyUp LeftFlipper -> { model | leftFlipper = False }
     KeyUp RightFlipper -> { model | rightFlipper = False }
     KeyUp _ -> model
+
 
     MouseMove (x, y) -> { model | mouse = (x, y) }
 
@@ -503,13 +498,19 @@ type alias Uniforms =
   , lightDirection : Vec3
   }
 
-cameraPosition : (Float, Float) -> Vec3
-cameraPosition (_, mouseY) =
-  Vec3.vec3 0 (-mouseY * 2) (2 - mouseY * 2)
+camera : Model -> Mat4
+camera model =
+  let
+    to = Vec3.vec3 0 0 0
+    from = case model.camera of
+      Cam2D -> Vec3.vec3 0 0 1.5
+      Cam3D -> Vec3.vec3 0 -0.95 0.3
+  in
+    Mat4.makeLookAt from to Vec3.j
 
 uniforms : Model -> Body Data -> Uniforms
 uniforms model body =
-  { camera = Mat4.makeLookAt (cameraPosition model.mouse) (Vec3.fromRecord model.camera.to) Vec3.j
+  { camera = camera model
   , perspective = Mat4.makePerspective 45 (model.canvas.width / model.canvas.height) 0.1 100
   , transform = Frame3d.toMat4 (Body.frame body)
   , color = (Body.data body).color
