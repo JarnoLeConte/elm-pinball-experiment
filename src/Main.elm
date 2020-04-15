@@ -146,11 +146,11 @@ update msg model =
         | world =
             model.world
               |> World.constrain constrainFlipper
-              |> \world ->
-                  let contacts = World.contacts world
-                  in World.update (updateWorld model contacts) world
+              |> (\world -> World.update (updateWorld model (World.contacts world)) world)
               |> World.simulate (Duration.seconds (1/180))
+              |> (\world -> World.update (updateWorld model (World.contacts world)) world)
               |> World.simulate (Duration.seconds (1/180))
+              |> (\world -> World.update (updateWorld model (World.contacts world)) world)
               |> World.simulate (Duration.seconds (1/180))
       }
 
@@ -242,7 +242,7 @@ bumpers =
       , (-7, -10)
       , (10, -20)
       , (15, -30)
-      , (0, -45)
+      , (20, 25)
       ]
 
 flippers : List (Body Data)
@@ -486,7 +486,7 @@ updateWorld model contacts body =
         |> if isContactBumper contacts then
               Body.applyImpulse
                 (Quantity.times (Duration.seconds 0.005) (Force.newtons 80))
-                Direction3d.positiveY
+                (Maybe.withDefault Direction3d.positiveY (Vector3d.direction (Body.velocity body)))
                 (Frame3d.originPoint (Body.frame body))
            else
               identity
