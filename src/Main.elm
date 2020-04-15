@@ -130,7 +130,7 @@ init : () -> ( Model, Cmd Msg )
 init _ =
   ( { canvas = { width = 1, height = 1 }
     , mouse = (0.5, 0.5)
-    , camera = Cam3D
+    , camera = Cam2D
     , world = initialWorld
     , leftFlipper = False
     , rightFlipper = False
@@ -338,6 +338,21 @@ border =
         , Length.centimeters 2
         )
         |> Block3d.translateBy (Vector3d.centimeters 0 59 1)
+    rampBlock =
+      Block3d.centeredOn
+        Frame3d.atOrigin
+        ( Length.centimeters 18
+        , Length.centimeters 2
+        , Length.centimeters 2
+        )
+    bottomRamp1 =
+      rampBlock
+        |> Block3d.rotateAround Axis3d.z (Angle.degrees -20)
+        |> Block3d.translateBy (Vector3d.centimeters -20 -49 1)
+    bottomRamp2 =
+      rampBlock
+        |> Block3d.rotateAround Axis3d.z (Angle.degrees 20)
+        |> Block3d.translateBy (Vector3d.centimeters 20 -49 1)
 
     blocks =
       [ bottomBlock1
@@ -345,6 +360,8 @@ border =
       , leftBlock
       , rightBlock
       , topBlock
+      , bottomRamp1
+      , bottomRamp2
       ]
 
     shape =
@@ -365,7 +382,7 @@ ball : Body Data
 ball =
   let
     sphere =
-      Sphere3d.atOrigin (Length.centimeters 0.8)
+      Sphere3d.atOrigin (Length.centimeters 1)
   in
     Body.sphere sphere
       { name = "ball"
@@ -373,7 +390,7 @@ ball =
       , color = Vec3.vec3 1 0 0
       }
       |> Body.withBehavior (Body.dynamic (Mass.grams 80))
-      |> Body.moveTo (Point3d.centimeters -5 50 0.8)
+      |> Body.moveTo (Point3d.centimeters -5 50 1)
       |> Body.withMaterial (Material.custom { friction = 0.3, bounciness = 0.1 })
 
 
@@ -424,7 +441,7 @@ isContactBetween a b contact =
 isContactBumper : List (Contact Data) -> Bool
 isContactBumper contacts =
   contacts
-    |> List.any (\c -> List.any (\f -> f c) (List.map (isContactBetween "ball") ["bumper", "border"]))
+    |> List.any (\c -> List.any (\f -> f c) (List.map (isContactBetween "ball") ["bumper"]))
 
 
 updateWorld : Model -> List (Contact Data) -> Body Data -> Body Data
